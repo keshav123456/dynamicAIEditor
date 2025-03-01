@@ -17,6 +17,7 @@ import { ContentItemMenu } from '../menus/ContentItemMenu'
 import { useSidebar } from '@/hooks/useSidebar'
 import * as Y from 'yjs'
 import { TiptapCollabProvider } from '@hocuspocus/provider'
+import { CommentsPanel } from './components/CommentsPanel'
 
 export const BlockEditor = ({
   aiToken,
@@ -30,8 +31,7 @@ export const BlockEditor = ({
   const menuContainerRef = useRef(null)
 
   const leftSidebar = useSidebar()
-  const { editor, users, collabState } = useBlockEditor({ aiToken, ydoc, provider })
-
+  const { editor, users, collabState, comments, setCurrentPrompt } = useBlockEditor({ aiToken, ydoc, provider })
 
   if (!editor || !users) {
     return null
@@ -48,7 +48,13 @@ export const BlockEditor = ({
           isSidebarOpen={leftSidebar.isOpen}
           toggleSidebar={leftSidebar.toggle}
         />
-        <EditorContent editor={editor} className="flex-1 overflow-y-auto" />
+        <div className="flex flex-1 overflow-hidden">
+          <EditorContent editor={editor} className="flex-1 overflow-y-auto" />
+          <CommentsPanel 
+            comments={comments} 
+            onPromptChange={setCurrentPrompt}
+          />
+        </div>
         <ContentItemMenu editor={editor} />
         <LinkMenu editor={editor} appendTo={menuContainerRef} />
         <TextMenu editor={editor} />

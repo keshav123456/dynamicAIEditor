@@ -10,7 +10,7 @@ export const initialContent = {
       content: [
         {
           type: 'text',
-          text: 'AI as a Rubber duck & Thought Partner',
+          text: 'Title: ',
         },
       ],
     }

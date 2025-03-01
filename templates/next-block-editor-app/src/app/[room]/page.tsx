@@ -14,9 +14,7 @@ import { Icon } from '@/components/ui/Icon'
 import { useCollaboration } from '@/hooks/useCollaboration'
 
 const useDarkmode = () => {
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(
-    typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)').matches : false,
-  )
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
@@ -98,7 +96,6 @@ export default function Document({ params }: { params: { room: string } }) {
 
   return (
     <>
-      {DarkModeSwitcher}
       <BlockEditor aiToken={aiToken ?? undefined} ydoc={providerState.yDoc} provider={providerState.provider} />
     </>
   )

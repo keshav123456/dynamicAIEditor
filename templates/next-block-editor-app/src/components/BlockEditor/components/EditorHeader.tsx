@@ -22,9 +22,12 @@ export const EditorHeader = ({ editor, collabState, users, isSidebarOpen, toggle
       return { characters: characters(), words: words() }
     },
   })
-
+  // End Generation Here
   return (
     <div className="flex flex-row items-center justify-between flex-none py-2 pl-6 pr-3 text-black bg-white border-b border-neutral-200 dark:bg-black dark:text-white dark:border-neutral-800">
+      <div className="flex-1 text-center">
+        <h1 className="text-lg font-semibold">AI as a Rubber Duck</h1>
+      </div>
       <div className="flex flex-row gap-x-1.5 items-center">
         <div className="flex items-center gap-x-1.5">
           <Toolbar.Button

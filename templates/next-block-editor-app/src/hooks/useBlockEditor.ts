@@ -12,38 +12,31 @@ import { randomElement } from '../lib/utils'
 import type { EditorUser } from '../components/BlockEditor/types'
 import { initialContent } from '@/lib/data/initialContent'
 import CommentExtension from "@sereneinserenade/tiptap-comment-extension";
+import { v4 } from 'uuid'
 
+export interface Comment {
+  id: string
+  content: string
+  replies: Comment[]
+  createdAt: Date
+}
+
+const getNewComment = (content: string): Comment => {
+  return {
+    id: `a${v4()}a`,
+    content,
+    replies: [],
+    createdAt: new Date()
+  }
+}
+
+interface GPTResponse {
+  comments: string[]
+}
 
 declare global {
   interface Window {
     editor: Editor | null
-  }
-}
-const analyzeWithGPT = async (paragraph: string, apiKey: string): Promise<string> => {
-  try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [{
-          role: "user",
-          content: `Critically analyze this paragraph and ONLY provide 2 brief questions (max 75 words total):
-          "${paragraph}"`
-        }],
-        temperature: 0.7,
-        max_tokens: 100
-      })
-    });
-
-    const data = await response.json();
-    return data.choices[0].message.content;
-  } catch (error) {
-    console.error('Error calling GPT API:', error);
-    return '';
   }
 }
 
@@ -60,29 +53,19 @@ export const useBlockEditor = ({
   userId?: string
   userName?: string
 }) => {
-  const [activeCommentId, setActiveCommentId] = useState<string | null>(null)
+  const [comments, setComments] = useState<Comment[]>([])
+  const [last_api_call_content_length, setLastApiCallContentLength] = useState<Number>(200)
+  const [api_in_progress, setApiInProgress] = useState<Boolean>(false)
+  const [currentPrompt, setCurrentPrompt] = useState("")
 
-  const commentsSectionRef = useRef<HTMLDivElement | null>(null)
-
-  const focusCommentWithActiveId = (id: string) => {
-    if (!commentsSectionRef.current) return
-
-    const commentInput = commentsSectionRef.current.querySelector<HTMLInputElement>(`input#${id}`)
-
-    if (!commentInput) return
-
-    commentInput.scrollIntoView({
-      behavior: 'smooth',
-      block: 'center',
-      inline: 'center'
-    })
+  const mapComments = (contents: string[]) => {
+    const newComments = contents.map(content => getNewComment(content))
+    setComments(newComments)
   }
 
   const [collabState, setCollabState] = useState<WebSocketStatus>(
     provider ? WebSocketStatus.Connecting : WebSocketStatus.Disconnected,
   )
-
-  let paragraphIndexes: number[] = []
 
   const editor = useEditor(
     {
@@ -105,37 +88,25 @@ export const useBlockEditor = ({
       },
       onUpdate: async ({ editor }) => {
         const content = editor.state.doc.content
-        let all_ids: number[] = []
-        content.forEach(async (node, pos) => {
-          all_ids.push(node.attrs.id)
-          if (node.type.name === 'paragraph' && !paragraphIndexes.includes(node.attrs.id)) {
-            
-            let content = node.content
-            if (content.size > 50){
-              if (!content.content[0].text.startsWith("\n") && content.content[0].text.endsWith(" ")) {
+        let content_size = 0
+        let text = ""
 
-                paragraphIndexes.push(node.attrs.id)
-                // Get paragraph text and analyze
-                const paragraphText = content.content[0].text;
-                const analysis = await analyzeWithGPT(paragraphText, aiToken);
-                
-                // Insert analysis as blockquote
-                if (analysis) {
-                  const { from, to } = editor.state.selection;
-                  // editor.commands.insertContentAt(pos, `<my-comment>${analysis}</my-comment>`);
-                  editor.commands.insertContentAt(pos, `<pre><code>${analysis}</code></pre>`);
-                  editor.commands.setTextSelection({ from: from, to: to })
-                }
-              } 
-            }
+        content.forEach(async (node, pos) => {
+          let content = node.content
+          content_size += content.size
+          if (content.size > 5) {
+            text += '\n'
+            text += content.content[0].text
           }
         })
-        
-        paragraphIndexes.forEach(index => {
-          if (!all_ids.includes(index)) {
-            console.error(`Error: Paragraph index ${index} does not exist in the document.`)
-          }
-        })
+        console.log(aiToken)
+        if ((content_size > (last_api_call_content_length + 100) || content_size < (last_api_call_content_length - 100)) && !api_in_progress) {
+          setApiInProgress(true)
+          const comments = await analyzeWithGPT(text)
+          mapComments(comments)
+          setLastApiCallContentLength(content_size)
+          setApiInProgress(false)
+        }
       },
       extensions: [
         ...ExtensionKit({
@@ -144,12 +115,7 @@ export const useBlockEditor = ({
         CommentExtension.configure({
           HTMLAttributes: {
             class: "my-comment",
-          },
-          onCommentActivated: (commentId) => {
-            setActiveCommentId(commentId);
-      
-            if (commentId) setTimeout(() => focusCommentWithActiveId(commentId));
-          },
+          }
         }),
         provider && ydoc
           ? Collaboration.configure({
@@ -203,5 +169,48 @@ export const useBlockEditor = ({
 
   window.editor = editor
 
-  return { editor, users, collabState }
+  const analyzeWithGPT = async (paragraph: string): Promise<string[]> => {
+
+    const apiKey = ""
+    try {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [{
+            role: "user",
+            content: `${currentPrompt}. Limit your response to 3 questions.Return your response as a JSON array of strings in this format: {"questions": ["question1", "question2", ...]}. For example: {"questions": ["Where is the supporting evidence?"]}
+
+            Text to analyze: "${paragraph}"`
+          }],
+          temperature: 0.7,
+          max_tokens: 100
+        })
+      });
+
+      const data = await response.json();
+      try {
+        const parsedResponse: GPTResponse = JSON.parse(data.choices[0].message.content);
+        return parsedResponse.questions;
+      } catch (parseError) {
+        console.error('Error parsing GPT response as JSON:', parseError);
+        return [data.choices[0].message.content];
+      }
+    } catch (error) {
+      console.error('Error calling GPT API:', error);
+      return [];
+    }
+  }
+
+  return { 
+    editor, 
+    users, 
+    collabState, 
+    comments,
+    setCurrentPrompt
+  }
 }
